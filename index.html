@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b1220">
 <meta name="description" content="Ascension — reprendre le contrôle, avancer à son rythme.">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ascension">
 <title>Ascension — V1.2</title>
 <style>
 :root{--bg:#07101f;--panel:#0e1a2c;--panel2:#13243a;--text:#f5f7fb;--muted:#a8b4c7;--accent:#8b7cff;--accent2:#5eead4;--danger:#fb7185;--line:#22324a;--shadow:0 20px 50px rgba(0,0,0,.25)}
@@ -24,7 +28,7 @@
 </head>
 <body>
 <div id="singleFileInfo" style="margin:14px 0;padding:12px 14px;border-radius:14px;background:rgba(139,124,255,.10);font-size:13px;line-height:1.45;color:inherit;">
-  <strong>Ascension V1 — prototype iPhone</strong><br>
+  <strong>Ascension V1.2 — prototype iPhone</strong><br>
   Cette version est autonome pour le premier test. Les données restent dans le stockage local de Safari.
 </div>
 
@@ -34,7 +38,14 @@
 <script>
 const KEY='ascension_v1';
 const defaults={started:false,goal:'',mode:'Reprise de contrôle',name:'',entries:[],trusted:'',notifications:false};
-let state=JSON.parse(localStorage.getItem(KEY)||'null')||structuredClone(defaults);
+let storedState=null;
+try{storedState=JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){storedState=null}
+let state={...defaults,...(storedState||{})};
+if(!Array.isArray(state.entries))state.entries=[];
+if(typeof state.goal!=='string')state.goal='';
+if(typeof state.mode!=='string')state.mode=defaults.mode;
+if(typeof state.name!=='string')state.name='';
+if(typeof state.trusted!=='string')state.trusted='';
 let screen='home';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 function save(){localStorage.setItem(KEY,JSON.stringify(state))}
