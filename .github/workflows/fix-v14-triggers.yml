@@ -1,0 +1,72 @@
+name: Fix V1.4 trigger selection
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-v14-triggers.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch iPhone and Mac trigger selection
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          triggers = ['Stress','Fatigue','Ennui','Solitude','Habitude','Anxiété','Tristesse','Colère','Situation sociale / soirée','Conflit','Environnement / lieu','Une personne','Pensée / souvenir','Manque / craving','Envie de plaisir','Autre']
+
+          def jsq(s):
+              return s.replace('\\', '\\\\').replace("'", "\\'")
+
+          def support_function():
+              buttons = ''.join(
+                  '<button class="triggerBtn ${supportTriggers.includes(\'' + jsq(t) + '\')?\'selected\':\'\'}" type="button" onclick="toggleSupportTrigger(\'' + jsq(t) + '\')">' + t + '</button>'
+                  for t in triggers
+              )
+              return '''function support(){openSheet(`<div class="eyebrow">JE SUIS LÀ</div><h2>Tu n'as pas besoin de lutter seul maintenant.</h2><p class="muted">On ne va pas régler toute ta vie. On va simplement s'occuper de cette envie.</p><label class="small">À quel point l'envie est-elle forte ?</label><input id="sint" class="range" type="range" min="1" max="10" value="${supportIntensity}" oninput="supportIntensity=Number(this.value);document.getElementById('sval').textContent=this.value"><div class="intensity"><span>1</span><strong id="sval">${supportIntensity}</strong><span>10</span></div><p class="small muted">Qu'est-ce qui joue dans cette envie ? <b>(plusieurs réponses possibles)</b></p><div class="triggerGrid" id="striggers">''' + buttons + '''</div><p class="small muted">Plusieurs choses peuvent être vraies en même temps.</p><button class="btn primary wide" onclick="supportHelp()">Continuer avec ${supportTriggers.length} déclencheur${supportTriggers.length>1?'s':''}</button><button class="btn ghost wide" style="margin-top:10px" onclick="recordUrge()">Je veux juste l'enregistrer</button><p class="small muted">Une envie n'est pas un ordre.</p>`) }'''
+
+          helpers = r'''function toggleSupportTrigger(t){
+            const intensity=document.getElementById('sint');
+            if(intensity) supportIntensity=Number(intensity.value)||6;
+            const i=supportTriggers.indexOf(t);
+            if(i>=0) supportTriggers.splice(i,1); else supportTriggers.push(t);
+            support();
+          }
+          function supportHelp(){openSheet(`<div class="eyebrow">JE SUIS LÀ</div><h2>Qu'est-ce qui pourrait t'aider maintenant ?</h2><p class="muted">${supportTriggers.length?triggerTags(supportTriggers)+'<br><br>':''}Choisis une chose. Il n'y a pas de bonne réponse.</p><div class="list"><button class="btn wide" onclick="breath()">🫁 Respirer et faire une pause</button><button class="btn wide" onclick="pauseStep()">🚶 Changer quelque chose autour de moi</button><button class="btn wide" onclick="supportNote()">✍️ Mettre des mots dessus</button><button class="btn wide" onclick="trustedSupport()">👤 Contacter quelqu'un</button><button class="btn ghost wide" onclick="recordChosenUrge()">Je veux simplement traverser le moment</button></div>`) }
+          function supportNote(){openSheet(`<div class="eyebrow">METTRE DES MOTS</div><h2>Qu'est-ce que tu veux garder de ce moment ?</h2><p class="muted">${triggerTags(supportTriggers)}</p><textarea id="supportNote" class="input textarea" placeholder="Je ressens… / Je pense à… / J'ai besoin de…"></textarea><button class="btn primary wide" onclick="saveSupportNote()">Enregistrer et continuer</button>`) }
+          function recordChosenUrge(){state.entries.push({date:new Date().toISOString(),type:'envie',intensity:supportIntensity,triggers:[...supportTriggers],note:'Envie enregistrée depuis le mode soutien.',help:''});save();supportTriggers=[];supportIntensity=6;closeSheet();toast('Tu as pris le temps de traverser ce moment.');render()}
+          function saveSupportNote(){const note=document.getElementById('supportNote').value.trim();if(!note){toast('Écris quelques mots si tu en as envie');return}state.entries.push({date:new Date().toISOString(),type:'envie',intensity:supportIntensity,triggers:[...supportTriggers],note:note,help:"J'ai pris le temps de mettre des mots dessus."});save();supportTriggers=[];supportIntensity=6;closeSheet();toast('Ton moment est enregistré.');render()}
+          '''
+
+          for filename in ['iphone/index.html','mac/index.html']:
+              p=Path(filename)
+              s=p.read_text(encoding='utf-8')
+              starts=[m.start() for m in re.finditer(r'function support\(\)\{',s)]
+              if not starts:
+                  raise RuntimeError(f'No support() in {filename}')
+              start=starts[-1]
+              choose=s.find('function supportChoose(',start)
+              if choose<0:
+                  raise RuntimeError(f'No supportChoose after final support() in {filename}')
+              s=s[:start]+support_function()+'\n'+s[choose:]
+              hstart=s.find('function supportChoose(',start)
+              rend=s.find('\nrender();',hstart)
+              if hstart<0 or rend<0:
+                  raise RuntimeError(f'Cannot locate legacy support helpers in {filename}')
+              s=s[:hstart]+helpers+s[rend:]
+              p.write_text(s,encoding='utf-8')
+
+      - name: Commit fix
+        run: |
+          git config user.name "Ascension Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add iphone/index.html mac/index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Fix V1.4 trigger selection on iPhone and Mac"
+          git push
