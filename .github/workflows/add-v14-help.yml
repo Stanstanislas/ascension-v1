@@ -1,0 +1,45 @@
+name: Add V1.4 help resources
+on:
+  push:
+    paths:
+      - '.github/workflows/add-v14-help.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add contextual help to iPhone and Mac
+        shell: python
+        run: |
+          from pathlib import Path
+          for p in [Path('iphone/index.html'), Path('mac/index.html')]:
+              s=p.read_text()
+              # Add a visible help button on Home, once.
+              needle="🔥 J'ai besoin d'Ascension</button>"
+              if "🤝 Trouver de l'aide" not in s and needle in s:
+                  s=s.replace(needle, needle+"<button class='btn wide' onclick='helpResources()' style='margin-top:10px'>🤝 Trouver de l'aide</button>",1)
+              # Add contextual official resources. France V1.
+              if 'function helpResources()' not in s:
+                  js=r'''
+function helpResources(){
+  const g=(state.goal||'').toLowerCase();
+  let specific='';
+  if(g.includes('jeu')) specific=`<div class="card"><h3>🎰 Joueurs Info Service</h3><p class="muted">Écoute confidentielle et sans jugement pour les jeux d'argent et de hasard.</p><a class="btn primary wide" style="display:block;text-align:center;text-decoration:none" href="tel:0974751313">📞 09 74 75 13 13</a><a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="https://www.joueurs-info-service.fr/" target="_blank" rel="noopener">🌐 Ouvrir le site officiel</a><p class="small muted">Téléphone : 7j/7, 8h–23h, appel anonyme non surtaxé. Chat : 12h–19h.</p></div>`;
+  else if(g.includes('alcool')) specific=`<div class="card"><h3>🍷 Alcool Info Service</h3><p class="muted">Pour parler de sa consommation ou de celle d'un proche.</p><a class="btn primary wide" style="display:block;text-align:center;text-decoration:none" href="tel:0980980930">📞 0 980 980 930</a><a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="https://www.alcool-info-service.fr/" target="_blank" rel="noopener">🌐 Ouvrir le site officiel</a><p class="small muted">7j/7, 8h–2h, appel anonyme non surtaxé.</p></div>`;
+  else if(g.includes('tabac')) specific=`<div class="card"><h3>🚭 Tabac Info Service</h3><p class="muted">Des tabacologues peuvent accompagner l'arrêt du tabac.</p><a class="btn primary wide" style="display:block;text-align:center;text-decoration:none" href="tel:3989">📞 39 89</a><a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="https://www.tabac-info-service.fr/" target="_blank" rel="noopener">🌐 Ouvrir le site officiel</a><p class="small muted">Du lundi au samedi, 9h–20h.</p></div>`;
+  else specific=`<div class="card"><h3>🧭 Être orienté</h3><p class="muted">Pour une addiction à une substance, Drogues Info Service peut écouter, informer et orienter vers une aide adaptée. Pour une addiction comportementale, un médecin ou un CSAPA peut également orienter vers le bon accompagnement.</p><a class="btn primary wide" style="display:block;text-align:center;text-decoration:none" href="tel:0800231313">📞 0 800 23 13 13</a><a class="btn wide" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="https://www.drogues-info-service.fr/" target="_blank" rel="noopener">🌐 Drogues Info Service</a><p class="small muted">7j/7, 8h–2h, appel anonyme et gratuit.</p></div>`;
+  openSheet(`<div class="eyebrow">AIDE HUMAINE</div><h2>Tu peux aussi parler à quelqu'un.</h2><p class="muted">Demander de l'aide ne signifie pas que tu as échoué. Ascension peut t'accompagner, mais parfois parler à une personne formée peut faire la différence.</p>${specific}<div class="card"><h3>🆘 Danger immédiat</h3><p class="muted">Si ta sécurité ou celle de quelqu'un d'autre est en danger immédiat, contacte les services d'urgence.</p><a class="btn danger wide" style="display:block;text-align:center;text-decoration:none" href="tel:112">📞 Appeler le 112</a></div><p class="small muted">Ressources France • informations vérifiées en octobre 2026. Ascension ne remplace pas un professionnel de santé.</p>`)
+}
+'''
+                  idx=s.rfind('\nrender();')
+                  if idx!=-1: s=s[:idx]+"\n"+js+s[idx:]
+              p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add iphone/index.html mac/index.html
+          git diff --cached --quiet || git commit -m "V1.4 add contextual official help resources"
+          git push
