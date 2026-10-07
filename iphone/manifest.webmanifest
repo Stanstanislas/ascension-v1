@@ -1,0 +1,12 @@
+{
+  "name": "Ascension",
+  "short_name": "Ascension",
+  "description": "Reprendre le contrôle, avancer à son rythme.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#07101f",
+  "theme_color": "#0b1220",
+  "orientation": "portrait-primary",
+  "lang": "fr-FR"
+}
