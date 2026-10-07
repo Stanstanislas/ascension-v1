@@ -167,6 +167,81 @@ function supportNote(){openSheet(`<div class="eyebrow">METTRE DES MOTS</div><h2>
 function recordChosenUrge(){state.entries.push({date:new Date().toISOString(),type:'envie',intensity:supportIntensity,triggers:[...supportTriggers],note:'Envie enregistrée depuis le mode soutien.',help:''});save();supportTriggers=[];supportIntensity=6;closeSheet();toast('Tu as pris le temps de traverser ce moment.');render()}
 function saveSupportNote(){const note=document.getElementById('supportNote').value.trim();if(!note){toast('Écris quelques mots si tu en as envie');return}state.entries.push({date:new Date().toISOString(),type:'envie',intensity:supportIntensity,triggers:[...supportTriggers],note:note,help:"J'ai pris le temps de mettre des mots dessus."});save();supportTriggers=[];supportIntensity=6;closeSheet();toast('Ton moment est enregistré.');render()}
 
+
+/* V1.4 — objectifs multiples et compteurs indépendants */
+const OBJECTIVE_TYPES=['Tabac','Alcool','Jeux d’argent','Alimentation','Réseaux sociaux','Jeux vidéo','Pornographie / sexualité','Achats compulsifs','Autre'];
+function objectiveId(){return 'obj_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7)}
+function migrateObjectives(){
+  if(!Array.isArray(state.objectives)) state.objectives=[];
+  if(!state.objectives.length && (state.goal||state.startDate)){
+    state.objectives.push({
+      id:objectiveId(),type:state.goal||'Autre',startDate:state.startDate||new Date().toISOString().slice(0,10),
+      cigarettesPerDay:state.cigarettesPerDay||'',packPrice:state.packPrice||'',packSize:Number(state.packSize)||20,
+      spendAmount:'',spendPeriod:'week',unitsPerDay:'',unitPrice:''
+    });
+    save();
+  }
+}
+migrateObjectives();
+function objectiveDays(o){if(!o||!o.startDate)return 0;const d=new Date(o.startDate+'T00:00:00');if(isNaN(d))return 0;const n=new Date(),t=new Date(n.getFullYear(),n.getMonth(),n.getDate());return Math.max(0,Math.floor((t-d)/86400000))}
+function moneySaved(o){
+  const d=objectiveDays(o);
+  if(o.type==='Tabac'){const c=Number(o.cigarettesPerDay),p=Number(o.packPrice),z=Number(o.packSize)||20;return c&&p?(d*c/z)*p:null}
+  if(o.type==='Jeux d’argent'||o.type==='Alcool'||o.type==='Achats compulsifs'){
+    const a=Number(o.spendAmount);if(!a)return null;const div=o.spendPeriod==='day'?1:o.spendPeriod==='month'?30.4375:7;return d*(a/div)
+  }
+  return null;
+}
+function objectiveExtra(o){
+  const d=objectiveDays(o), saved=moneySaved(o);
+  if(o.type==='Tabac'&&Number(o.cigarettesPerDay)){const c=Math.floor(d*Number(o.cigarettesPerDay));return "<div class='counterGrid'><div class='counterStat'><b>🚭 "+c+"</b><div class='small muted'>cigarettes non fumées env.</div></div>"+(saved!==null?"<div class='counterStat'><b>💶 "+saved.toFixed(0)+" €</b><div class='small muted'>économisés env.</div></div>":"")+"</div>"}
+  if(saved!==null)return "<div class='counterStat' style='margin-top:10px'><b>💶 "+saved.toFixed(0)+" €</b><div class='small muted'>dépenses évitées estimées</div></div>";
+  return "";
+}
+function objectiveCard(o){
+  const icons={'Tabac':'🚬','Alcool':'🍷','Jeux d’argent':'🎰','Alimentation':'🍽️','Réseaux sociaux':'📱','Jeux vidéo':'🎮','Pornographie / sexualité':'🧭','Achats compulsifs':'🛍️','Autre':'🌱'};
+  const d=objectiveDays(o);
+  return "<div class='card'><div style='display:flex;justify-content:space-between;gap:12px;align-items:flex-start'><div><div class='eyebrow'>"+(icons[o.type]||'🌱')+" "+esc(o.type)+"</div><div class='counter'>"+d+" jour"+(d>1?'s':'')+"</div><div class='small muted'>depuis le "+new Date(o.startDate+'T00:00:00').toLocaleDateString('fr-FR')+"</div></div><button class='btn ghost' style='padding:8px 11px' onclick=\"editObjective('"+o.id+"')\">✎</button></div>"+objectiveExtra(o)+"<p class='small muted'>Ce compteur est un repère, pas une mesure de ta valeur.</p></div>";
+}
+function objectivesHome(){migrateObjectives();return state.objectives.length?state.objectives.map(objectiveCard).join(''):"<div class='card'><h3>Mon premier objectif</h3><p class='muted'>Ajoute ce que tu souhaites reprendre en main. Chaque objectif aura son propre compteur.</p></div>"}
+function home(){
+ const n=state.entries.filter(e=>e.type==='envie').length;
+ return "<section class='hero'><div class='eyebrow'>"+greeting()+"</div><h1>"+(state.name?esc(state.name)+", tu n'es pas seul.":"Tu n'as pas besoin d'être parfait.")+"</h1><p>Tu peux avancer sur plusieurs choses à la fois, chacune à son rythme.</p></section>"+objectivesHome()+"<button class='btn ghost wide' onclick='addObjective()' style='margin:4px 0 12px'>＋ Ajouter un objectif</button><button class='btn primary wide pulse' onclick='support()' style='font-size:18px;padding:19px'>🔥 J'ai besoin d'Ascension</button><div class='grid'><button class='btn' onclick='quickJournal()'>✍️ Journal</button><button class='btn' onclick=\"screen='progress';render()\">📈 Progression</button></div>"+(state.why?"<div class='card'><div class='eyebrow'>MON POURQUOI</div><p style='font-size:18px;line-height:1.5'>« "+esc(state.why)+" »</p></div>":"<div class='card'><h3>❤️ Pourquoi es-tu ici ?</h3><button class='btn wide' onclick='setWhy()'>Définir mon pourquoi</button></div>");
+}
+function objectiveFields(type,o={}){
+ if(type==='Tabac')return "<div class='card'><h3>Repères tabac</h3><label class='small'>Cigarettes par jour</label><input id='objCigs' class='input' type='number' min='0' value='"+esc(o.cigarettesPerDay||'')+"' placeholder='Ex. 15'><label class='small' style='display:block;margin-top:10px'>Prix du paquet (€)</label><input id='objPackPrice' class='input' type='number' min='0' step='0.01' value='"+esc(o.packPrice||'')+"' placeholder='Ex. 12,50'><label class='small' style='display:block;margin-top:10px'>Cigarettes par paquet</label><input id='objPackSize' class='input' type='number' min='1' value='"+esc(o.packSize||20)+"'></div>";
+ if(['Jeux d’argent','Alcool','Achats compulsifs'].includes(type))return "<div class='card'><h3>Repère financier <span class='small muted'>(facultatif)</span></h3><label class='small'>Dépense moyenne avant l'arrêt / la réduction</label><input id='objSpend' class='input' type='number' min='0' step='0.01' value='"+esc(o.spendAmount||'')+"' placeholder='Ex. 100'><select id='objPeriod' class='input' style='margin-top:10px'><option value='day' "+(o.spendPeriod==='day'?'selected':'')+">par jour</option><option value='week' "+(!o.spendPeriod||o.spendPeriod==='week'?'selected':'')+">par semaine</option><option value='month' "+(o.spendPeriod==='month'?'selected':'')+">par mois</option></select><p class='small muted'>Ascension affichera uniquement une estimation des dépenses évitées.</p></div>";
+ return "<div class='card'><p class='small muted'>Pour cet objectif, le compteur de jours reste volontairement simple pour le moment.</p></div>";
+}
+function addObjective(){
+ const today=new Date().toISOString().slice(0,10);
+ openSheet("<h2>Ajouter un objectif</h2><p class='muted'>Chaque objectif possède son propre point de départ.</p><label class='small'>Ce que tu veux reprendre en main</label><select id='objType' class='input' onchange='refreshObjectiveFields()'>"+OBJECTIVE_TYPES.map(x=>"<option>"+x+"</option>").join('')+"</select><label class='small' style='display:block;margin-top:12px'>Date de début / arrêt</label><input id='objDate' class='input' type='date' value='"+today+"'><div id='objFields'>"+objectiveFields('Tabac')+"</div><button class='btn primary wide' onclick='saveObjective()'>Ajouter cet objectif</button>");
+}
+function refreshObjectiveFields(){const type=document.getElementById('objType').value;document.getElementById('objFields').innerHTML=objectiveFields(type)}
+function saveObjective(){
+ const type=document.getElementById('objType').value,date=document.getElementById('objDate').value;if(!date){toast('Choisis une date de départ');return}
+ const o={id:objectiveId(),type,startDate:date,cigarettesPerDay:'',packPrice:'',packSize:20,spendAmount:'',spendPeriod:'week'};
+ if(type==='Tabac'){o.cigarettesPerDay=document.getElementById('objCigs')?.value||'';o.packPrice=document.getElementById('objPackPrice')?.value||'';o.packSize=Number(document.getElementById('objPackSize')?.value||20)}
+ if(['Jeux d’argent','Alcool','Achats compulsifs'].includes(type)){o.spendAmount=document.getElementById('objSpend')?.value||'';o.spendPeriod=document.getElementById('objPeriod')?.value||'week'}
+ state.objectives.push(o);save();closeSheet();render();toast('Nouvel objectif ajouté');
+}
+function editObjective(id){
+ const o=state.objectives.find(x=>x.id===id);if(!o)return;
+ openSheet("<h2>"+esc(o.type)+"</h2><label class='small'>Date de début / arrêt</label><input id='editObjDate' class='input' type='date' value='"+esc(o.startDate)+"'><div id='editObjFields'>"+objectiveFields(o.type,o)+"</div><button class='btn primary wide' onclick=\"saveObjectiveEdit('"+id+"')\">Enregistrer</button><button class='btn danger wide' style='margin-top:10px' onclick=\"removeObjective('"+id+"')\">Retirer cet objectif</button>");
+}
+function saveObjectiveEdit(id){
+ const o=state.objectives.find(x=>x.id===id);if(!o)return;o.startDate=document.getElementById('editObjDate').value||o.startDate;
+ if(o.type==='Tabac'){o.cigarettesPerDay=document.getElementById('objCigs')?.value||'';o.packPrice=document.getElementById('objPackPrice')?.value||'';o.packSize=Number(document.getElementById('objPackSize')?.value||20)}
+ if(['Jeux d’argent','Alcool','Achats compulsifs'].includes(o.type)){o.spendAmount=document.getElementById('objSpend')?.value||'';o.spendPeriod=document.getElementById('objPeriod')?.value||'week'}
+ save();closeSheet();render();toast('Objectif mis à jour');
+}
+function removeObjective(id){if(!confirm('Retirer cet objectif de l’accueil ? Ton journal reste conservé.'))return;state.objectives=state.objectives.filter(x=>x.id!==id);save();closeSheet();render();toast('Objectif retiré')}
+const settingsLegacy=settings;
+function settings(){
+ migrateObjectives();
+ return "<section class='hero'><div class='eyebrow'>PARAMÈTRES</div><h1>Tu contrôles tes données.</h1><p>V1 : Ascension fonctionne localement sur cet appareil.</p></section><div class='card'><h3>Mon espace</h3><label class='small'>Nom affiché (facultatif)</label><input class='input' value='"+esc(state.name)+"' onchange='state.name=this.value;save()'></div><div class='card'><h3>Mes objectifs</h3><p class='small muted'>Tu peux suivre plusieurs addictions ou comportements en parallèle. Chaque objectif possède son propre compteur.</p>"+(state.objectives.length?state.objectives.map(o=>"<button class='btn choice' onclick=\"editObjective('"+o.id+"')\"><b>"+esc(o.type)+"</b><br><span class='small muted'>Depuis le "+new Date(o.startDate+'T00:00:00').toLocaleDateString('fr-FR')+"</span></button>").join(''):"<p class='muted'>Aucun objectif pour le moment.</p>")+"<button class='btn primary wide' onclick='addObjective()'>＋ Ajouter un objectif</button></div><div class='card'><h3>Personne de confiance</h3><p class='small muted'>Un nom ou un numéro peut être enregistré sur cet appareil. Ascension ne contacte personne automatiquement.</p><input id='trusted' class='input' placeholder='Nom / téléphone' value='"+esc(state.trusted)+"'><button class='btn wide' style='margin-top:10px' onclick='saveTrusted()'>Enregistrer</button></div><div class='card'><h3>Données</h3><p class='small muted'>Les données restent dans le stockage local du navigateur.</p><button class='btn danger wide' onclick='eraseAll()'>Effacer toutes mes données</button></div><div class='card'><h3>À propos</h3><p class='small muted'><b>Ascension V1.4</b><br>Un compteur est un repère, pas une mesure de ta valeur.</p></div>";
+}
+
 render();
 </script>
 </body>
